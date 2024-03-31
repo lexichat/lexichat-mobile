@@ -11,4 +11,8 @@ class JwtUtil {
   static Future<void> setJwtToken(String token) async {
     await _storage.write(key: 'jwtToken', value: token);
   }
+
+  static Future<void> setUserId(String userId) async {
+    await _storage.write(key: 'userId', value: userId);
+  }
 }

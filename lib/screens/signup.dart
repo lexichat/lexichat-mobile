@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lexichat/screens/home.dart';
+import 'package:lexichat/screens/llm_setup.dart';
 import 'package:lexichat/utils/signup.dart';
+import 'dart:io';
+
+import 'package:image_picker/image_picker.dart';
+
+String PhoneNumberExtension = "+91";
 
 class SignUpScreen extends StatefulWidget {
-  final String jwtKey;
-
-  SignUpScreen({required this.jwtKey});
+  SignUpScreen();
 
   @override
   _SignUpScreenState createState() => _SignUpScreenState();
@@ -103,6 +106,14 @@ class OTPScreen extends StatefulWidget {
 class _OTPScreenState extends State<OTPScreen> {
   final _formKey = GlobalKey<FormState>();
   final _otpController = TextEditingController();
+  bool _isLoading = false;
+  int _retryCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestFirebaseForOTP(PhoneNumberExtension + widget.phoneNumber);
+  }
 
   @override
   void dispose() {
@@ -110,22 +121,55 @@ class _OTPScreenState extends State<OTPScreen> {
     super.dispose();
   }
 
-  void _handleOTPVerification() async {
+  void _requestFirebaseForOTP(phoneNumber) async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      await sendVerificationCode(phoneNumber);
+    } catch (e) {
+      // Handle error
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _handleOTPVerification() async {
     if (_formKey.currentState!.validate()) {
-      bool isOTPValid = await verifyOTP(_otpController.text);
-      if (isOTPValid) {
-        // Navigate to HomeScreen
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => HomeScreen()),
-          (route) => false,
-        );
-      } else {
-        // Show wrong OTP message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Wrong OTP. Please try again.'),
-          ),
-        );
+      setState(() {
+        _isLoading = true;
+      });
+      try {
+        bool isOTPValid = await verifyCode(_otpController.text.trim());
+        if (isOTPValid) {
+          Navigator.of(context).push(MaterialPageRoute(
+              builder: (context) => GetUserDetails(
+                    phoneNumber: widget.phoneNumber,
+                  )));
+        } else {
+          setState(() {
+            _retryCount++;
+          });
+          if (_retryCount >= 3) {
+            // Show maximum retry reached message
+          } else {
+            // Show wrong OTP message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Wrong OTP. Please try again.'),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        // Handle error
+        print(e);
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -136,36 +180,154 @@ class _OTPScreenState extends State<OTPScreen> {
       appBar: AppBar(
         title: Text('OTP Verification'),
       ),
+      body: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Enter the OTP sent to ${widget.phoneNumber}'),
+                    SizedBox(height: 16.0),
+                    TextFormField(
+                      controller: _otpController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        labelText: 'OTP',
+                      ),
+                      validator: (value) {
+                        if (value!.length != 6) {
+                          return 'Please enter a valid 6-digit OTP';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: 16.0),
+                    ElevatedButton(
+                      onPressed: _handleOTPVerification,
+                      child: Text('Verify'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class GetUserDetails extends StatefulWidget {
+  final String phoneNumber;
+  GetUserDetails({required this.phoneNumber});
+
+  @override
+  _GetUserDetailsState createState() => _GetUserDetailsState();
+}
+
+class _GetUserDetailsState extends State<GetUserDetails> {
+  final TextEditingController _usernameController = TextEditingController();
+
+  // File? _imageFile;
+  Uint8List? _imgFileData;
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 25);
+    if (pickedFile != null) {
+      File imageFile = File(pickedFile.path);
+      int fileSize = await imageFile.length();
+      if (fileSize > 5 * 1024 * 1024) {
+        // File size check (5MB limit)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Selected image exceeds 5MB limit.'),
+          ),
+        );
+      } else {
+        setState(() {
+          _imgFileData = imageFile.readAsBytesSync();
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Get User Details'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Enter the OTP sent to ${widget.phoneNumber}'),
-              SizedBox(height: 16.0),
-              TextFormField(
-                controller: _otpController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'OTP',
+        child: Column(
+          children: [
+            TextField(
+              controller: _usernameController,
+              decoration: InputDecoration(
+                labelText: 'Username',
+              ),
+            ),
+            SizedBox(height: 16.0),
+            GestureDetector(
+              onTap: _pickImage,
+              child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.grey[200],
+                  image: _imgFileData != null
+                      ? DecorationImage(
+                          image: MemoryImage(_imgFileData!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
                 ),
-                validator: (value) {
-                  if (value!.length != 6) {
-                    return 'Please enter a valid 6-digit OTP';
-                  }
-                  return null;
-                },
+                child: _imgFileData == null
+                    ? Icon(Icons.camera_alt, size: 40)
+                    : null,
               ),
-              SizedBox(height: 16.0),
-              ElevatedButton(
-                onPressed: _handleOTPVerification,
-                child: Text('Verify'),
-              ),
-            ],
-          ),
+            ),
+            SizedBox(height: 16.0),
+            ElevatedButton(
+              onPressed: () async {
+                print('Username: ${_usernameController.text}');
+                // create user
+                String? err = await createUser(
+                    _usernameController.text,
+                    (PhoneNumberExtension + " " + widget.phoneNumber),
+                    _imgFileData,
+                    context);
+
+                if (err == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('User created successfully!'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => LLMSetupScreen()),
+                    (route) => false,
+                  );
+                } else {
+                  // tell there is error through snackbar
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(err),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
+              },
+              child: Text('Save'),
+            ),
+          ],
         ),
       ),
     );
