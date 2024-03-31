@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "419438960775",
+    "project_id": "lexichat-ce3c1",
+    "storage_bucket": "lexichat-ce3c1.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:419438960775:android:b47c9e1499092651265822",
+        "android_client_info": {
+          "package_name": "com.example.lexichat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDfnDg9KRG_69BsdI2X65ZcZOKQk15vkjQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
