@@ -47,14 +47,14 @@ class LLMSetupScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'curl -sL https://raw.githubusercontent.com/your-username/your-repo/main/setup_llama.sh | dos2unix | bash -s',
+                      'curl -sL https://raw.githubusercontent.com/shripadaRao/lexichat-mobile/main/lib/scripts/setup_environment.bash | dos2unix | bash -s',
                       style: TextStyle(fontFamily: 'Courier'),
                     ),
                   ),
                   IconButton(
                     onPressed: () {
                       _copyToClipboard(
-                        'curl -sL https://raw.githubusercontent.com/your-username/your-repo/main/setup_llama.sh | dos2unix | bash -s',
+                        'curl -sL https://raw.githubusercontent.com/shripadaRao/lexichat-mobile/main/lib/scripts/setup_environment.bash | dos2unix | bash -s',
                         context,
                       );
                     },
@@ -77,14 +77,14 @@ class LLMSetupScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'curl -sL https://raw.githubusercontent.com/your-username/your-repo/main/download_llm.sh | bash -s 1',
+                      'curl -sL https://raw.githubusercontent.com/shripadaRao/lexichat-mobile/main/lib/scripts/download_llm.bash | bash -s 1',
                       style: TextStyle(fontFamily: 'Courier'),
                     ),
                   ),
                   IconButton(
                     onPressed: () {
                       _copyToClipboard(
-                          'curl -sL https://raw.githubusercontent.com/your-username/your-repo/main/download_llm.sh | bash -s 1',
+                          'curl -sL https://raw.githubusercontent.com/shripadaRao/lexichat-mobile/main/lib/scripts/download_llm.bash | bash -s 1',
                           context);
                     },
                     icon: Icon(Icons.copy),
@@ -123,8 +123,8 @@ class LLMSetupScreen extends StatelessWidget {
 
   void _copyToClipboard(String text, BuildContext context) async {
     Clipboard.setData(ClipboardData(text: text)).then((_) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Email address copied to clipboard")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Copied to clipboard")));
     });
   }
 }
