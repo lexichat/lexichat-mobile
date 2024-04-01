@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lexichat/screens/llm_setup.dart';
+import 'package:lexichat/screens/loading.dart';
 import 'package:lexichat/utils/signup.dart';
 import 'dart:io';
 
@@ -42,52 +43,112 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return null;
   }
 
-  void _showOTPScreen() {
+  void _showOTPScreen() async {
     setState(() {
       _phoneNumberError = _validatePhoneNumber(_phoneNumberController.text);
     });
 
     if (_formKey.currentState!.validate()) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              OTPScreen(phoneNumber: _phoneNumberController.text),
-        ),
-      );
+      bool isConnected = await checkBackendConnection();
+      if (isConnected) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                OTPScreen(phoneNumber: _phoneNumberController.text),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Unable to connect to backend. Please try again later.'),
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Sign Up'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _phoneNumberController,
-                keyboardType: TextInputType.phone,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'Phone Number',
-                  errorText: _phoneNumberError,
-                ),
-                validator: _validatePhoneNumber,
-              ),
-              SizedBox(height: 16.0),
-              ElevatedButton(
-                onPressed: _showOTPScreen,
-                child: Text('Next'),
-              ),
-            ],
+      resizeToAvoidBottomInset: false,
+      body: Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage("assets/images/bg-welcome-signup.jpg"),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Colors.grey.withOpacity(0.23),
+              BlendMode.srcATop,
+            ),
           ),
+        ),
+        child: Center(
+          child: SizedBox(
+              width: 360,
+              height: 310,
+              child: SingleChildScrollView(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.5),
+                        spreadRadius: 5,
+                        blurRadius: 7,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextFormField(
+                            controller: _phoneNumberController,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                            decoration: InputDecoration(
+                              labelText: 'Phone Number',
+                              errorText: _phoneNumberError,
+                            ),
+                            validator: _validatePhoneNumber,
+                          ),
+                          SizedBox(height: 12.0),
+                          Text(
+                            'You will receive OTP and will also be redirected to your browser for auto captcha.',
+                            style: TextStyle(
+                              color: Colors.red.shade400,
+                              fontSize: 12.0,
+                            ),
+                          ),
+                          SizedBox(height: 12.0),
+                          const Text(
+                            'By signing up, you agree with terms and conditions.',
+                            style: TextStyle(
+                              color: Colors.black45,
+                              fontSize: 12.0,
+                            ),
+                          ),
+                          SizedBox(height: 16.0),
+                          ElevatedButton(
+                            onPressed: _showOTPScreen,
+                            child: Text('Next'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              )),
         ),
       ),
     );
@@ -177,46 +238,111 @@ class _OTPScreenState extends State<OTPScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('OTP Verification'),
-      ),
-      body: _isLoading
-          ? Center(
-              child: CircularProgressIndicator(),
-            )
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Enter the OTP sent to ${widget.phoneNumber}'),
-                    SizedBox(height: 16.0),
-                    TextFormField(
-                      controller: _otpController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
-                        labelText: 'OTP',
-                      ),
-                      validator: (value) {
-                        if (value!.length != 6) {
-                          return 'Please enter a valid 6-digit OTP';
-                        }
-                        return null;
-                      },
-                    ),
-                    SizedBox(height: 16.0),
-                    ElevatedButton(
-                      onPressed: _handleOTPVerification,
-                      child: Text('Verify'),
-                    ),
-                  ],
-                ),
+        resizeToAvoidBottomInset: false,
+        body: Container(
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage("assets/images/bg-welcome-signup.jpg"),
+              fit: BoxFit.cover,
+              colorFilter: ColorFilter.mode(
+                Colors.grey.withOpacity(0.23),
+                BlendMode.srcATop,
               ),
             ),
-    );
+          ),
+          child: Center(
+            child: SizedBox(
+              width: 360,
+              height: 300,
+              child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.5),
+                        spreadRadius: 5,
+                        blurRadius: 7,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: _isLoading
+                          ? Center(
+                              child: CircularProgressIndicator(),
+                            )
+                          : Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        const TextSpan(
+                                          text: 'Enter the OTP sent to\n',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text:
+                                              '$PhoneNumberExtension ${widget.phoneNumber}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                            color: Colors
+                                                .black, // You can customize the color if needed
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(height: 14.0),
+                                  TextFormField(
+                                    controller: _otpController,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly
+                                    ],
+                                    decoration: const InputDecoration(
+                                      labelText: 'OTP',
+                                    ),
+                                    validator: (value) {
+                                      if (value!.length != 6) {
+                                        return 'Please enter a valid 6-digit OTP';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  SizedBox(height: 20.0),
+                                  ElevatedButton(
+                                    onPressed: _handleOTPVerification,
+                                    child: Text('Verify'),
+                                  ),
+                                  SizedBox(height: 25.0),
+                                  const Center(
+                                    child: Text(
+                                      'resend OTP',
+                                      style: TextStyle(
+                                        color: Colors.blue,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                    ),
+                  )),
+            ),
+          ),
+        ));
   }
 }
 
@@ -259,77 +385,118 @@ class _GetUserDetailsState extends State<GetUserDetails> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Get User Details'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: InputDecoration(
-                labelText: 'Username',
+        resizeToAvoidBottomInset: false,
+        body: Container(
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage("assets/images/bg-welcome-signup.jpg"),
+              fit: BoxFit.cover,
+              colorFilter: ColorFilter.mode(
+                Colors.grey.withOpacity(0.23),
+                BlendMode.srcATop,
               ),
             ),
-            SizedBox(height: 16.0),
-            GestureDetector(
-              onTap: _pickImage,
+          ),
+          child: Center(
+            child: SizedBox(
+              width: 360,
+              height: 450,
               child: Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.grey[200],
-                  image: _imgFileData != null
-                      ? DecorationImage(
-                          image: MemoryImage(_imgFileData!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                child: _imgFileData == null
-                    ? Icon(Icons.camera_alt, size: 40)
-                    : null,
-              ),
-            ),
-            SizedBox(height: 16.0),
-            ElevatedButton(
-              onPressed: () async {
-                print('Username: ${_usernameController.text}');
-                // create user
-                String? err = await createUser(
-                    _usernameController.text,
-                    (PhoneNumberExtension + " " + widget.phoneNumber),
-                    _imgFileData,
-                    context);
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.5),
+                        spreadRadius: 5,
+                        blurRadius: 7,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'Enter your details',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          SizedBox(height: 16),
+                          TextField(
+                            controller: _usernameController,
+                            decoration: InputDecoration(
+                              labelText: 'Username',
+                            ),
+                          ),
+                          SizedBox(height: 16.0),
+                          GestureDetector(
+                            onTap: _pickImage,
+                            child: Container(
+                              width: 200,
+                              height: 200,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.grey[200],
+                                image: _imgFileData != null
+                                    ? DecorationImage(
+                                        image: MemoryImage(_imgFileData!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: _imgFileData == null
+                                  ? Icon(Icons.camera_alt, size: 40)
+                                  : null,
+                            ),
+                          ),
+                          SizedBox(height: 16.0),
+                          ElevatedButton(
+                            onPressed: () async {
+                              print('Username: ${_usernameController.text}');
+                              // create user
+                              String? err = await createUser(
+                                  _usernameController.text,
+                                  (PhoneNumberExtension +
+                                      " " +
+                                      widget.phoneNumber),
+                                  _imgFileData,
+                                  context);
 
-                if (err == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('User created successfully!'),
-                      duration: Duration(seconds: 3),
+                              if (err == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('User created successfully!'),
+                                    duration: Duration(seconds: 3),
+                                  ),
+                                );
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                      builder: (context) => LLMSetupScreen()),
+                                  (route) => false,
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(err),
+                                    duration: Duration(seconds: 3),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Text('Save'),
+                          ),
+                        ],
+                      ),
                     ),
-                  );
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => LLMSetupScreen()),
-                    (route) => false,
-                  );
-                } else {
-                  // tell there is error through snackbar
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(err),
-                      duration: Duration(seconds: 3),
-                    ),
-                  );
-                }
-              },
-              child: Text('Save'),
+                  )),
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 }
