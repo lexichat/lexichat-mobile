@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:lexichat/screens/home.dart';
@@ -5,7 +6,9 @@ import 'package:lexichat/screens/loading.dart';
 import 'package:lexichat/screens/signup.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:lexichat/screens/welcome.dart';
+import 'package:lexichat/utils/db.dart';
 import 'firebase_options.dart';
+import 'package:lexichat/config/config.dart' as config;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,6 +16,8 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await dotenv.load(fileName: ".env");
+  await setupFirebaseMessaging();
+  await initializeAndConnectDB("test.db");
   runApp(MyApp());
 }
 
@@ -42,3 +47,37 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
+Future<void> setupFirebaseMessaging() async {
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+  try {
+    String? fcmToken = await messaging.getToken();
+    print('FCM Token: $fcmToken');
+
+    if (fcmToken != null && fcmToken.isNotEmpty) {
+      config.FCMToken = fcmToken;
+    } else {
+      throw Exception("FCM token is empty or null");
+    }
+  } catch (e) {
+    print('Error getting FCM token: $e');
+    throw Exception("Couldn't generate FCM token");
+  }
+}
+
+
+// class ChatApp extends StatelessWidget {
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(
+//       debugShowCheckedModeBanner: false,
+//       title: 'Chat App',
+//       theme: ThemeData(
+//         primarySwatch: Colors.blue,
+//         visualDensity: VisualDensity.adaptivePlatformDensity,
+//       ),
+//       home: HomePage(),
+//     );
+//   }
+// }
