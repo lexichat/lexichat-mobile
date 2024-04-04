@@ -145,16 +145,14 @@ class _MyAppBarState extends State<MyAppBar> {
       backgroundColor: bg1,
       elevation: 0,
       title: widget.isSearching
-          ? Expanded(
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search Profile',
-                  border: InputBorder.none,
-                ),
-                autofocus: true,
-                onChanged: widget.onSearch,
+          ? TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search Profile',
+                border: InputBorder.none,
               ),
+              autofocus: true,
+              onChanged: widget.onSearch,
             )
           : Text('LexiChat'),
       actions: <Widget>[
