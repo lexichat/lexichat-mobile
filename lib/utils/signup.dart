@@ -3,14 +3,13 @@ import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:lexichat/config/config.dart' as config;
 import 'package:lexichat/models/User.dart' as lexichat;
 import 'package:lexichat/utils/jwt.dart';
 import 'package:flutter/material.dart';
 
 String? _verificationId;
 String? _phoneNumber;
-String? BASE_API_URL = dotenv.env["BASE_API_URL"];
 
 Future<void> sendVerificationCode(String phoneNumber) async {
   await FirebaseAuth.instance.verifyPhoneNumber(
@@ -60,16 +59,19 @@ isPhoneNumberInUse(number) {
 }
 
 Future<String?> createUser(
+  String userID,
   String username,
   String phoneNumber,
+  String fcm_token,
   Uint8List? profilePicture,
   BuildContext context,
 ) async {
-  final url = Uri.parse(BASE_API_URL! + "/api/v1/user/create");
+  final url = Uri.parse(config.BASE_API_URL! + "/api/v1/users/create");
   final user = lexichat.User(
-    id: null,
-    username: username,
+    userID: userID,
+    userName: username,
     phoneNumber: phoneNumber,
+    fcmToken: fcm_token,
     profilePicture: profilePicture?.toList() ?? [],
     createdAt: null,
   );

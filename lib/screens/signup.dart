@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lexichat/screens/llm_setup.dart';
+import 'package:lexichat/screens/home.dart';
 import 'package:lexichat/screens/loading.dart';
 import 'package:lexichat/utils/signup.dart';
+import 'package:lexichat/config/config.dart' as config;
 import 'dart:io';
 
 import 'package:image_picker/image_picker.dart';
@@ -356,6 +357,7 @@ class GetUserDetails extends StatefulWidget {
 
 class _GetUserDetailsState extends State<GetUserDetails> {
   final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _userIDController = TextEditingController();
 
   // File? _imageFile;
   Uint8List? _imgFileData;
@@ -400,7 +402,7 @@ class _GetUserDetailsState extends State<GetUserDetails> {
           child: Center(
             child: SizedBox(
               width: 360,
-              height: 450,
+              height: 550,
               child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -425,6 +427,13 @@ class _GetUserDetailsState extends State<GetUserDetails> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
+                            ),
+                          ),
+                          SizedBox(height: 16),
+                          TextField(
+                            controller: _userIDController,
+                            decoration: InputDecoration(
+                              labelText: 'UserID',
                             ),
                           ),
                           SizedBox(height: 16),
@@ -458,13 +467,16 @@ class _GetUserDetailsState extends State<GetUserDetails> {
                           SizedBox(height: 16.0),
                           ElevatedButton(
                             onPressed: () async {
+                              print('userId : ${_userIDController.text}');
                               print('Username: ${_usernameController.text}');
                               // create user
                               String? err = await createUser(
+                                  _userIDController.text,
                                   _usernameController.text,
                                   (PhoneNumberExtension +
                                       " " +
                                       widget.phoneNumber),
+                                  config.FCMToken,
                                   _imgFileData,
                                   context);
 
@@ -477,7 +489,7 @@ class _GetUserDetailsState extends State<GetUserDetails> {
                                 );
                                 Navigator.of(context).pushAndRemoveUntil(
                                   MaterialPageRoute(
-                                      builder: (context) => LLMSetupScreen()),
+                                      builder: (context) => HomeScreen()),
                                   (route) => false,
                                 );
                               } else {

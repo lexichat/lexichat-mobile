@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:lexichat/config/config.dart' as config;
 import 'package:lexichat/utils/jwt.dart';
 import 'package:http/http.dart' as http;
 
@@ -86,7 +86,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
 
 Future<bool> checkBackendConnection() async {
   try {
-    String? baseApiUrl = dotenv.env["BASE_API_URL"];
+    String? baseApiUrl = config.BASE_API_URL;
     if (baseApiUrl == null || baseApiUrl.isEmpty) {
       print("BASE_API_URL not found or empty in the .env file");
       return false;
