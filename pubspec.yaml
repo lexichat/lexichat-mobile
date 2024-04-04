@@ -41,8 +41,10 @@ dependencies:
   image_picker: ^1.0.7
   firebase_auth: ^4.16.0
   firebase_core: ^2.24.2
-  uuid: ^4.2.2
   flutter_dotenv: ^5.1.0
+  firebase_messaging: ^14.8.0
+  intl: ^0.19.0
+  sqflite: ^2.3.3
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +72,11 @@ flutter:
     - assets/images/app_logo.png
     - .env
     - assets/images/bg-welcome-signup.jpg
+
+  fonts:
+    - family: ChatIcons
+      fonts:
+        - asset: assets/fonts/ChatIcons.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware
