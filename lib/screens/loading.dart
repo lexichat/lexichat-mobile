@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:lexichat/config/config.dart' as config;
 import 'package:lexichat/utils/jwt.dart';
 import 'package:http/http.dart' as http;
+import 'package:lexichat/utils/ws_manager.dart';
+import 'package:lexichat/utils/loading.dart';
 
 class LoadingScreen extends StatefulWidget {
   const LoadingScreen({super.key});
@@ -34,6 +36,11 @@ class _LoadingScreenState extends State<LoadingScreen> {
     if (jwtToken == null || jwtToken == "") {
       Navigator.pushReplacementNamed(context, '/welcome');
     } else {
+      await Future.wait([
+        _populateUserDetails(),
+        _initializeWebSocketManager(),
+      ]);
+
       Navigator.pushReplacementNamed(context, '/home');
     }
   }
@@ -41,9 +48,17 @@ class _LoadingScreenState extends State<LoadingScreen> {
   Future<void> _getJwtToken() async {
     String? token = await JwtUtil.getJwtToken();
     print("token $token");
+    config.JWT_Token = token;
     setState(() {
       jwtToken = token;
     });
+  }
+
+  Future<void> _initializeWebSocketManager() async {
+    final List<String> urls = ['ws://192.168.1.13:8000/ws?channel=3'];
+    wsManager = WebSocketManager(urls);
+
+    // manager.testSendData('826453df-6ef1-4aef-b529-77da9fbbd10b', 'blank blank');
   }
 
   Future<void> _checkBackendConnection() async {
@@ -52,6 +67,10 @@ class _LoadingScreenState extends State<LoadingScreen> {
       isBackendConnected = isConnected;
     });
     // _showBackendConnectionStatus();
+  }
+
+  Future<void> _populateUserDetails() async {
+    LocalUserState.fetchUserConfigData();
   }
 
   @override
