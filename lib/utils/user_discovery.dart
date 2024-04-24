@@ -26,3 +26,15 @@ Future<List<User>> discoverUsersByUserId(String partialUserId) async {
     throw Exception('Failed to load users: $e');
   }
 }
+
+Future<User> fetchUserDetails(String userID) async {
+  final apiURL = config.BASE_API_URL! + '/api/v1/users/${userID}';
+  final response = await http.get(Uri.parse(apiURL));
+
+  if (response.statusCode == 200) {
+    final Map<String, dynamic> data = jsonDecode(response.body);
+    return User.fromJson(data);
+  } else {
+    throw Exception('Failed to load user details');
+  }
+}
