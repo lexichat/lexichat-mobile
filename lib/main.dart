@@ -65,19 +65,3 @@ Future<void> setupFirebaseMessaging() async {
     throw Exception("Couldn't generate FCM token");
   }
 }
-
-
-// class ChatApp extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       debugShowCheckedModeBanner: false,
-//       title: 'Chat App',
-//       theme: ThemeData(
-//         primarySwatch: Colors.blue,
-//         visualDensity: VisualDensity.adaptivePlatformDensity,
-//       ),
-//       home: HomePage(),
-//     );
-//   }
-// }
