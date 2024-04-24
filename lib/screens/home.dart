@@ -1,10 +1,17 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:lexichat/models/Chat.dart';
 import 'package:lexichat/models/User.dart';
 import 'package:lexichat/screens/llm_setup.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/painting.dart' as painting;
+import 'package:lexichat/utils/db.dart';
 import 'package:lexichat/utils/user_discovery.dart';
+import 'package:lexichat/utils/ws_manager.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
+import 'package:lexichat/config/config.dart' as config;
 
 const bg1 = Color(0xFFF5F5F5);
 const bg2 = Color(0xFFF5F5DC);
@@ -19,6 +26,31 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSearching = false;
   String _searchQuery = '';
   List<User> _searchResults = [];
+  Map<User, Conversation> _userProfilesWithLatestMessage = {};
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserProfiles(DBClient);
+  }
+
+  void _fetchUserProfiles(Database db) async {
+    _userProfilesWithLatestMessage = await fetchUsersWithLatestConversation(db);
+    print("user profiles with latest message");
+    print(_userProfilesWithLatestMessage);
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  void updateUserProfilesWithLatestMessage(
+      User user, Conversation conversation) {
+    setState(() {
+      _userProfilesWithLatestMessage[user] = conversation;
+    });
+    print("_userProfilesWithLatestMessage: ${_userProfilesWithLatestMessage}");
+  }
 
   void _toggleSearching() {
     setState(() {
@@ -32,44 +64,59 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: bg3,
-      appBar: MyAppBar(
-        isSearching: _isSearching,
-        onSearch: (query) {
-          setState(() {
-            _isSearching = true;
-            _searchQuery = query;
-          });
-          _performSearch(query);
-        },
-        onClearSearch: () {
-          setState(() {
-            _isSearching = false;
-            _searchQuery = '';
-            _searchResults = [];
-          });
-          // _toggleSearching();
-        },
-        toggleSearching: _toggleSearching,
-      ),
-      drawer: MoreOptionsDrawer(),
-      body: _isSearching
-          ? Container(
-              child: showSearchResults(),
-            )
-          : ListView.builder(
-              itemCount: 10,
-              itemBuilder: (context, index) {
-                return ProfileTile(
-                  profileImage: '',
-                  username: 'User $index',
-                  lastMessage: 'This is the last message from user $index',
-                  time: '10:30 AM',
-                );
+    return _isLoading
+        ? Container()
+        : Scaffold(
+            backgroundColor: bg3,
+            appBar: MyAppBar(
+              isSearching: _isSearching,
+              onSearch: (query) {
+                setState(() {
+                  _isSearching = true;
+                  _searchQuery = query;
+                });
+                _performSearch(query);
               },
+              onClearSearch: () {
+                setState(() {
+                  _isSearching = false;
+                  _searchQuery = '';
+                  _searchResults = [];
+                });
+                // _toggleSearching();
+              },
+              toggleSearching: _toggleSearching,
             ),
-    );
+            drawer: MoreOptionsDrawer(),
+            body: _isSearching
+                ? Container(
+                    child: showSearchResults(),
+                  )
+                : _userProfilesWithLatestMessage.length == 0
+                    ? Center(
+                        child: Text('Search for people and start chatting'),
+                      )
+                    : ListView.builder(
+                        itemCount: _userProfilesWithLatestMessage.length,
+                        itemBuilder: (context, index) {
+                          final channelLastMessage =
+                              _userProfilesWithLatestMessage.values
+                                  .elementAt(index);
+                          String lastMessage = channelLastMessage.message == ""
+                              ? "No past messages found with user"
+                              : channelLastMessage.message;
+                          return ProfileTile(
+                            user: _userProfilesWithLatestMessage.keys
+                                .elementAt(index),
+                            lastMessage: lastMessage,
+                            time: DateFormat('hh:mm a')
+                                .format((channelLastMessage.createdAt)),
+                            updateUserProfileCallback:
+                                updateUserProfilesWithLatestMessage,
+                          );
+                        },
+                      ),
+          );
   }
 
   Widget showSearchResults() {
@@ -86,12 +133,34 @@ class _HomeScreenState extends State<HomeScreen> {
         itemCount: _searchResults.length,
         itemBuilder: (context, index) {
           final user = _searchResults[index];
-          return ListTile(
-            leading: CircleAvatar(
-              child: Text(user.userName[0]),
+          return GestureDetector(
+            onTap: () async {
+              // check whether to create a new channel
+              await Future.wait([
+                CreateChannelIfNotExists(user, DBClient),
+                PopulateUserTableIfNotExists(user, DBClient)
+              ]);
+
+              // navigate and show chat screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    otherUser: user,
+                    updateUserProfileCallback:
+                        updateUserProfilesWithLatestMessage,
+                  ),
+                ),
+              );
+              print("clicked on user ${user.userID}");
+            },
+            child: ListTile(
+              leading: CircleAvatar(
+                child: Text(user.userName[0]),
+              ),
+              title: Text(user.userName),
+              subtitle: Text(user.phoneNumber),
             ),
-            title: Text(user.userName),
-            subtitle: Text(user.phoneNumber),
           );
         },
       );
@@ -227,17 +296,16 @@ class MoreOptionsDrawer extends StatelessWidget {
 }
 
 class ProfileTile extends StatelessWidget {
-  final String profileImage;
-  final String username;
+  final User user;
   final String lastMessage;
   final String time;
+  final Function(User, Conversation) updateUserProfileCallback;
 
-  const ProfileTile({
-    required this.profileImage,
-    required this.username,
-    required this.lastMessage,
-    required this.time,
-  });
+  const ProfileTile(
+      {required this.user,
+      required this.lastMessage,
+      required this.time,
+      required this.updateUserProfileCallback});
 
   @override
   Widget build(BuildContext context) {
@@ -249,7 +317,10 @@ class ProfileTile extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ChatScreen(profileName: username),
+              builder: (context) => ChatScreen(
+                otherUser: user,
+                updateUserProfileCallback: updateUserProfileCallback,
+              ),
             ),
           );
         },
@@ -274,7 +345,7 @@ class ProfileTile extends StatelessWidget {
                 child: CircleAvatar(
                   radius: 30,
                   child: Text(
-                    username[0],
+                    user.userName[0],
                     style: TextStyle(
                       fontSize: 24,
                     ),
@@ -286,7 +357,7 @@ class ProfileTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      username,
+                      user.userName,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
@@ -319,39 +390,46 @@ class ProfileTile extends StatelessWidget {
 }
 
 class ChatScreen extends StatefulWidget {
-  final String profileName;
+  final User otherUser;
+  final Function(User, Conversation) updateUserProfileCallback;
 
-  ChatScreen({required this.profileName});
+  ChatScreen(
+      {required this.otherUser, required this.updateUserProfileCallback});
 
   @override
   _ChatScreenState createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  List<Map<String, dynamic>> messages = [
-    {
-      "from_user_id": "User 0",
-      "message": "Hello, this is a long message. how you doing, im doing great",
-      "created_at": DateTime.now(),
-      "status": "read"
-    },
-    {
-      "from_user_id": "User 1",
-      "message": """
-Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.
-""",
-      "created_at": DateTime.now(),
-      "status": "delivered"
-    },
-  ];
+  List<Conversation> messages = [];
+  late Channel channelDetails;
 
   late TextEditingController _messagingController;
+
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _messagingController = TextEditingController();
-    // fetchMessagesReverseChronologically();
+    initializeData();
+  }
+
+  initializeData() async {
+    print("other user's name ${widget.otherUser.userName}");
+    Channel _channelDetails =
+        await _fetchChannelDetails(DBClient, widget.otherUser.userName);
+    setState(() {
+      channelDetails = _channelDetails;
+    });
+
+    messages =
+        await _fetchMessagesReverseChronologically(DBClient, channelDetails.id);
+    messages = messages.reversed.toList();
+
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   @override
@@ -360,103 +438,131 @@ Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem
     super.dispose();
   }
 
+  Future<Channel> _fetchChannelDetails(Database db, String channelName) async {
+    Channel? channelDetails = await fetchChannelDataByName(db, channelName);
+    if (channelDetails == null) {
+      throw Exception("Failed to fetch channel details");
+    }
+    return channelDetails;
+  }
+
+  Future<List<Conversation>> _fetchMessagesReverseChronologically(
+      Database db, int channelID) async {
+    final int _messagesPerBatch = 100;
+    int _nextOffSet = 0;
+    List<Conversation> latestMessagesFromChannelName =
+        await readLatestMessagesFromChannelName(
+            db, channelID, _messagesPerBatch, _nextOffSet);
+    return latestMessagesFromChannelName;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: bg3,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
-        title: Text(widget.profileName),
-        backgroundColor: bg1,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              // reverse: true,
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                return MessageTile(
-                  message: messages[index]["message"],
-                  isCurrentUser:
-                      messages[index]["from_user_id"] == widget.profileName,
-                  status: messages[index]["status"],
-                  timestamp: messages[index]["created_at"].toString(),
-                );
-              },
+    return _isLoading
+        ? Container()
+        : Scaffold(
+            backgroundColor: bg3,
+            appBar: AppBar(
+              leading: IconButton(
+                icon: Icon(Icons.arrow_back),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+              title: Text(widget.otherUser.userName),
+              backgroundColor: bg1,
+              elevation: 0,
             ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                  offset: Offset(0, -3),
-                ),
-              ],
-            ),
-            child: Row(
+            body: Column(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _messagingController,
-                    decoration: InputDecoration(
-                      hintText: 'Type a message...',
-                      hintStyle: TextStyle(color: Colors.grey),
-                      contentPadding: EdgeInsets.symmetric(
-                          horizontal: 16.0, vertical: 12.0),
-                      border: InputBorder.none,
-                      filled: true,
-                      fillColor: bg3,
-                    ),
+                  child: ListView.builder(
+                    // reverse: true,
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      return MessageTile(
+                        message: messages[index].message,
+                        isCurrentUser: messages[index].fromUserId !=
+                            widget.otherUser.userID,
+                        status: messages[index].status,
+                        timestamp: messages[index].createdAt.toString(),
+                      );
+                    },
                   ),
                 ),
                 Container(
                   decoration: BoxDecoration(
-                    color: bg3,
-                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 5,
+                        offset: Offset(0, -3),
+                      ),
+                    ],
                   ),
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.send,
-                      color: Colors.green,
-                    ),
-                    onPressed: () {
-                      // Send message
-                      sendMessage(_messagingController.text);
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      ;
-                    },
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _messagingController,
+                          decoration: InputDecoration(
+                            hintText: 'Type a message...',
+                            hintStyle: TextStyle(color: Colors.grey),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16.0, vertical: 12.0),
+                            border: InputBorder.none,
+                            filled: true,
+                            fillColor: bg3,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: bg3,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.send,
+                            color: Colors.green,
+                          ),
+                          onPressed: () {
+                            // Send message
+                            // sendMessage(_messagingController.text);
+                            sendMessage(Conversation(
+                                id: Uuid().v4().toString(),
+                                channelId: channelDetails.id,
+                                createdAt: DateTime.now(),
+                                fromUserId: config.userDetails.userID,
+                                message: _messagingController.text,
+                                status: "pending"));
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            ;
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
+          );
   }
 
-  void sendMessage(String message) {
+  void sendMessage(Conversation message) {
+    print("message id: ${message.id}");
     setState(() {
-      messages.add(
-        {
-          "from_user_id": widget.profileName,
-          "message": message,
-          "created_at": DateTime.now(),
-          "status": "pending",
-        },
-      );
+      messages.add(message);
     });
+    widget.updateUserProfileCallback(widget.otherUser, message);
+    //await update local db
+    writeConversation(DBClient, message);
+
+    // await pushMessageToServer()
+    wsManager.sendMessage(
+        OutBoundMessage(Message: message.message, MessageID: message.id));
     _messagingController.clear();
   }
 }
