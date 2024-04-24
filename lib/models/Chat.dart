@@ -1,11 +1,13 @@
 class Channel {
-  final String id;
-  final DateTime createdAt;
+  final int id;
+  final String channelName;
+  final DateTime? createdAt;
   final String tonalityTag;
   final String description;
 
   Channel({
     required this.id,
+    required this.channelName,
     required this.createdAt,
     required this.tonalityTag,
     required this.description,
@@ -14,10 +16,23 @@ class Channel {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'created_at': createdAt.millisecondsSinceEpoch,
+      'channel_name': channelName,
+      'created_at': createdAt?.millisecondsSinceEpoch,
       'tonality_tag': tonalityTag,
       'description': description,
     };
+  }
+
+  factory Channel.fromMap(Map<String, dynamic> map) {
+    return Channel(
+      id: map['id'],
+      channelName: map['channel_name'],
+      createdAt: map['created_at'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(int.parse(map['created_at'])),
+      tonalityTag: map['tonality_tag'],
+      description: map['description'],
+    );
   }
 }
 
@@ -38,12 +53,17 @@ class Conversation {
     required this.status,
   });
 
+  @override
+  String toString() {
+    return 'Conversation(id: $id, channelId: $channelId, createdAt: $createdAt, fromUserId: $fromUserId, message: $message, status: $status)';
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'channel_id': channelId,
       'created_at': createdAt.millisecondsSinceEpoch,
-      'from_user_id': fromUserId,
+      'sender_user_id': fromUserId,
       'message': message,
       'status': status,
     };
@@ -53,10 +73,21 @@ class Conversation {
     return Conversation(
       id: map['id'],
       channelId: map['channel_id'],
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at']),
-      fromUserId: map['from_user_id'],
+      createdAt:
+          DateTime.fromMillisecondsSinceEpoch(int.parse(map['created_at'])),
+      fromUserId: map['sender_user_id'],
       message: map['message'],
       status: map['status'],
+    );
+  }
+  factory Conversation.empty() {
+    return Conversation(
+      id: '',
+      channelId: 0,
+      createdAt: DateTime.now(),
+      fromUserId: '',
+      message: '',
+      status: '',
     );
   }
 }
