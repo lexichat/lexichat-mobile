@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lexichat/models/User.dart';
 import 'package:lexichat/screens/home.dart';
 import 'package:lexichat/screens/loading.dart';
+import 'package:lexichat/utils/loading.dart';
 import 'package:lexichat/utils/signup.dart';
 import 'package:lexichat/config/config.dart' as config;
 import 'dart:io';
@@ -467,8 +469,19 @@ class _GetUserDetailsState extends State<GetUserDetails> {
                           SizedBox(height: 16.0),
                           ElevatedButton(
                             onPressed: () async {
-                              print('userId : ${_userIDController.text}');
-                              print('Username: ${_usernameController.text}');
+                              // print('userId : ${_userIDController.text}');
+                              // print('Username: ${_usernameController.text}');
+                              User userDetails = User(
+                                userID: _userIDController.text,
+                                userName: _usernameController.text,
+                                phoneNumber: (PhoneNumberExtension +
+                                    " " +
+                                    widget.phoneNumber),
+                                fcmToken: config.FCMToken,
+                                profilePicture: _imgFileData,
+                                createdAt: '',
+                              );
+
                               // create user
                               String? err = await createUser(
                                   _userIDController.text,
@@ -487,6 +500,8 @@ class _GetUserDetailsState extends State<GetUserDetails> {
                                     duration: Duration(seconds: 3),
                                   ),
                                 );
+                                // store local state of user deets
+                                LocalUserState.updateUserDetails(userDetails);
                                 Navigator.of(context).pushAndRemoveUntil(
                                   MaterialPageRoute(
                                       builder: (context) => HomeScreen()),
