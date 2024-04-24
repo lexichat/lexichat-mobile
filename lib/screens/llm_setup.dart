@@ -47,14 +47,14 @@ class LLMSetupScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'curl -sL https://raw.githubusercontent.com/shripadaRao/lexichat-mobile/main/lib/scripts/setup_environment.bash | dos2unix | bash -s',
+                      "curl -sL https://raw.githubusercontent.com/shripadaRao/lexichat-mobile/main/lib/scripts/setup_environment.bash | sed 's/\r//' | bash -s",
                       style: TextStyle(fontFamily: 'Courier'),
                     ),
                   ),
                   IconButton(
                     onPressed: () {
                       _copyToClipboard(
-                        'curl -sL https://raw.githubusercontent.com/shripadaRao/lexichat-mobile/main/lib/scripts/setup_environment.bash | dos2unix | bash -s',
+                        "curl -sL https://raw.githubusercontent.com/shripadaRao/lexichat-mobile/main/lib/scripts/setup_environment.bash | sed 's/\r//' | bash -s",
                         context,
                       );
                     },
