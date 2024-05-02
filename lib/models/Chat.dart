@@ -1,16 +1,16 @@
 class Channel {
   final int id;
-  final String channelName;
+  final String? channelName;
   final DateTime? createdAt;
-  final String tonalityTag;
-  final String description;
+  final String? tonalityTag;
+  final String? description;
 
   Channel({
     required this.id,
-    required this.channelName,
-    required this.createdAt,
-    required this.tonalityTag,
-    required this.description,
+    this.channelName,
+    this.createdAt,
+    this.tonalityTag,
+    this.description,
   });
 
   Map<String, dynamic> toMap() {
@@ -27,9 +27,9 @@ class Channel {
     return Channel(
       id: map['id'],
       channelName: map['channel_name'],
-      createdAt: map['created_at'] == null
-          ? null
-          : DateTime.fromMillisecondsSinceEpoch(int.parse(map['created_at'])),
+      createdAt:
+          // map['created_at'] != null ? DateTime.parse(map['created_at']) :
+          null,
       tonalityTag: map['tonality_tag'],
       description: map['description'],
     );
@@ -39,10 +39,10 @@ class Channel {
 class Conversation {
   final String id;
   final int channelId;
-  final DateTime createdAt;
+  DateTime createdAt;
   final String fromUserId;
   final String message;
-  final String status;
+  String status;
 
   Conversation({
     required this.id,
@@ -80,6 +80,16 @@ class Conversation {
       status: map['status'],
     );
   }
+  factory Conversation.fromServer(Map<String, dynamic> map) {
+    return Conversation(
+      id: map['id'],
+      channelId: map['channel_id'],
+      createdAt: DateTime.parse(map['created_at']),
+      fromUserId: map['sender_user_id'],
+      message: map['content'],
+      status: map['status'],
+    );
+  }
   factory Conversation.empty() {
     return Conversation(
       id: '',
@@ -106,5 +116,26 @@ class ChannelUser {
       'channel_id': channelId,
       'user_id': userId,
     };
+  }
+}
+
+enum MessageStatuses {
+  pending,
+  sent,
+  delivered,
+  read;
+
+  @override
+  String toString() {
+    switch (this) {
+      case MessageStatuses.pending:
+        return 'pending';
+      case MessageStatuses.sent:
+        return 'sent';
+      case MessageStatuses.delivered:
+        return 'delivered';
+      case MessageStatuses.read:
+        return 'read';
+    }
   }
 }

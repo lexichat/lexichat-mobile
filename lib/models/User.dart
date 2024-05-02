@@ -44,8 +44,9 @@ class User {
       userID: json['user_id'],
       userName: json['user_name'],
       phoneNumber: json['phone_number'],
-      profilePicture: json['profile_picture'],
-      fcmToken: json['fcm_token'],
+      profilePicture:
+          json['profile_picture'] == "" ? null : json['profile_picture'],
+      fcmToken: json['fcm_token'] ?? "NA",
       createdAt: json['created_at'],
     );
   }
