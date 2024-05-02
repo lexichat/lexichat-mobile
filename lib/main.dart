@@ -7,6 +7,7 @@ import 'package:lexichat/screens/signup.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:lexichat/screens/welcome.dart';
 import 'package:lexichat/utils/db.dart';
+import 'package:lexichat/utils/fcm_manager.dart';
 import 'firebase_options.dart';
 import 'package:lexichat/config/config.dart' as config;
 
@@ -57,6 +58,8 @@ Future<void> setupFirebaseMessaging() async {
 
     if (fcmToken != null && fcmToken.isNotEmpty) {
       config.FCMToken = fcmToken;
+      config.fcmManager = FCMManager();
+      await config.fcmManager.initState();
     } else {
       throw Exception("FCM token is empty or null");
     }
