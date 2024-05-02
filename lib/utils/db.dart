@@ -113,44 +113,185 @@ Future<List<Conversation>> readMessages(Database db, int channelId) async {
 }
 
 // Read channel_id and its latest message
+// Future<Map<User, Conversation>> fetchUsersWithLatestConversation(
+//     Database db) async {
+//   // final channelConversations = <String, Conversation>{};
+
+//   final channelDetails = await db.query(
+//     'channels',
+//     columns: ['id', 'channel_name'],
+//     distinct: true,
+//   );
+
+//   List<int> channelIDs =
+//       channelDetails.map((channel) => channel['id'] as int).toList();
+
+//   print("channelids: ${channelIDs}");
+//   Map<int, Conversation> mostRecentChannelsMessage =
+//       await _fetchMostRecentChannelsMessage(db, channelIDs);
+
+//   // for (final channel in channelDetails) {
+//   //   final channelId = channel['id'] as int;
+//   //   channelConversations[channel['channel_name'].toString()] =
+//   //       mostRecentChannelsMessage[channelId] ?? Conversation.empty();
+//   // }
+
+//   // Fetch user details
+//   List<User> users =
+//       // await fetchUsersByUsernames(db, channelConversations.keys.toList());
+//       await fetchAllUsersFromChannelUsers(db, channelIDs);
+
+//   // Create a map with User as the key and Conversation as the value
+//   Map<User, Conversation> usersWithLatestConversation = {};
+//   // for (var user in users) {
+//   //   final channelName = user.userName;
+//   //   if (channelConversations.containsKey(channelName)) {
+//   //     usersWithLatestConversation[user] = channelConversations[channelName]!;
+//   //   }
+//   // }
+
+//   return usersWithLatestConversation;
+// }
 Future<Map<User, Conversation>> fetchUsersWithLatestConversation(
     Database db) async {
-  final channelConversations = <String, Conversation>{};
+  Map<int, Channel> channelDetails = await fetchAllChannels(db);
+  print("channelids: ${channelDetails.keys}");
 
-  final channelDetails = await db.query(
-    'channels',
-    columns: ['id', 'channel_name'],
-    distinct: true,
-  );
-
-  List<int> channelIDs =
-      channelDetails.map((channel) => channel['id'] as int).toList();
-
-  print("channelids: ${channelIDs}");
   Map<int, Conversation> mostRecentChannelsMessage =
-      await _fetchMostRecentChannelsMessage(db, channelIDs);
+      await _fetchMostRecentChannelsMessage(db, channelDetails.keys.toList());
 
-  for (final channel in channelDetails) {
-    final channelId = channel['id'] as int;
-    channelConversations[channel['channel_name'].toString()] =
-        mostRecentChannelsMessage[channelId] ?? Conversation.empty();
-  }
+  Map<int, User> channelUserMapping =
+      await fetchUsersByChannelId(db, channelDetails.keys.toList());
 
-  // Fetch user details
-  List<User> users =
-      await fetchUsersByUsernames(db, channelConversations.keys.toList());
-
-  // Create a map with User as the key and Conversation as the value
   Map<User, Conversation> usersWithLatestConversation = {};
-  for (var user in users) {
-    final channelName = user.userName;
-    if (channelConversations.containsKey(channelName)) {
-      usersWithLatestConversation[user] = channelConversations[channelName]!;
+
+  channelUserMapping.forEach((channelId, user) {
+    if (mostRecentChannelsMessage.containsKey(channelId)) {
+      usersWithLatestConversation[user] = mostRecentChannelsMessage[channelId]!;
     }
-  }
+  });
 
   return usersWithLatestConversation;
 }
+
+Future<Map<int, User>> fetchUsersByChannelId(
+    Database db, List channelIds) async {
+  final results = await db.query(
+    'channel_users',
+    columns: ['channel_id', 'user_id'],
+    where: 'channel_id IN (${channelIds.join(',')})',
+  );
+
+  final usersByIdMap = <int, User>{};
+
+  for (final row in results) {
+    final channelId = row['channel_id'] as int;
+    final userId = row['user_id'] as String;
+
+    if (!usersByIdMap.containsKey(channelId)) {
+      final userResults = await db.query(
+        'users',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+
+      final user = User.fromJson(userResults.first);
+
+      usersByIdMap[channelId] = user;
+    }
+  }
+
+  return usersByIdMap;
+}
+// Future<Map<User, Conversation>> fetchUsersWithLatestConversation(
+//     Database db) async {
+//   final Map<User, Conversation> usersWithLatestConversation = {};
+
+//   String rawQuery = """
+//     SELECT
+//       channel_users.channel_id,
+//       channel_users.user_id,
+//       COALESCE(
+//         (
+//           SELECT channels.channel_name
+//           FROM channels
+//           WHERE channel_users.channel_id = channels.id
+//         ),
+//         users.user_name
+//       ) AS channel_name,
+//       users.* ,
+//       (
+//         SELECT *
+//         FROM messages AS m
+//         WHERE m.channel_id = channel_users.channel_id
+//         ORDER BY m.created_at DESC
+//         LIMIT 1
+//       ) AS latest_message
+//     FROM channel_users
+//     INNER JOIN users ON channel_users.user_id = users.user_id
+//     WHERE channel_users.user_id <> ?;
+//   """;
+
+//   List<Map<String, dynamic>> results =
+//       await db.rawQuery(rawQuery, [config.userDetails.userID]);
+
+//   for (Map<String, dynamic> result in results) {
+//     User user = User.fromJson(result['user_details']);
+//     Conversation conversation = Conversation.fromMap(result['latest_message']);
+//     usersWithLatestConversation[user] = conversation;
+//   }
+
+//   return usersWithLatestConversation;
+// }
+
+// Future<Map<User, Conversation>> fetchUsersWithLatestConversation(
+//     Database db) async {
+//   final Map<User, Conversation> usersWithLatestConversation = {};
+
+//   String query = '''
+// SELECT
+//       u.*,
+//       (
+//         SELECT
+//           json_object(
+//             'id', m.id,
+//             'message', m.message,
+//             'created_at', m.created_at,
+//             'channel_id', m.channel_id,
+//             'sender_user_id', m.sender_user_id,
+//             'status', m.status
+//           )
+//         FROM
+//           messages m
+//         WHERE
+//           m.channel_id = cu.channel_id
+//         ORDER BY
+//           m.created_at DESC
+//         LIMIT
+//           1
+//       ) AS latest_message
+//     FROM
+//       channel_users cu
+//       INNER JOIN users u ON cu.user_id = u.user_id
+//     WHERE
+//       cu.user_id <> ?
+//   ''';
+
+//   final List<Map<String, dynamic>> results =
+//       await db.rawQuery(query, [config.userDetails.userID]);
+
+//   for (final Map<String, dynamic> result in results) {
+//     final Map<String, dynamic> userDetails = Map.from(result)
+//       ..remove('latest_message');
+//     final User user = User.fromJson(userDetails);
+//     final Conversation conversation =
+//         Conversation.fromMap(result['latest_message']);
+
+//     usersWithLatestConversation[user] = conversation;
+//   }
+
+//   return usersWithLatestConversation;
+// }
 
 Future<Map<int, Conversation>> _fetchMostRecentChannelsMessage(
     Database db, List<int> channelIDs) async {
@@ -208,7 +349,7 @@ Future<List<Conversation>> readLatestMessagesFromChannel(
     limit: limit,
   );
   if (conversations.length == 0) {
-    print("con conversations found in channel");
+    print("no conversations found in channel");
     return conversations.map((map) => Conversation.fromMap(map)).toList();
   }
   print(conversations.first);
@@ -243,28 +384,33 @@ Future<List<Conversation>> searchMessagesInChannel(
 }
 
 // create channel with user if not exists
-Future<void> CreateChannelIfNotExists(User otherUser, Database db) async {
+Future<int> InitiateCreationOfChannelIfNotExists(User otherUser,
+    String firstMessageContent, String messageID, Database db) async {
   // check if userID exists from channel.channel_name
-  String query = "SELECT channel_name FROM channels WHERE channel_name = ?";
-  List<Map<String, dynamic>> result =
-      await db.rawQuery(query, [otherUser.userName]);
+  // String query = "SELECT channel_name FROM channels WHERE channel_name = ?";
+  // List<Map<String, dynamic>> result =
+  //     await db.rawQuery(query, [otherUser.userName]);
 
-  print("isNewChannel creation? ${result.length == 0}");
+  // print("isNewChannel creation? ${result.length == 0}");
+
+  print("creating new channel");
 
   // if exists, call readLatestMessagesFromChannel()
-  if (result.length > 0) {
-    return;
-  } else {
-    // Else, create channel
-    int channelID = await _createChannelServer(otherUser.userID);
-    print("channel id that was created: ${channelID}");
-    if (channelID == -1) {
-      return;
-    }
-    await _createChannelLocally(db, channelID, otherUser.userName);
-    await _populateChannelUsersLocally(
-        db, channelID, [otherUser.userID, config.userDetails.userID]);
+  // if (result.length > 0) {
+  //   return -1;
+  // } else {
+  // Else, create channel
+  int channelID = await _createChannelServer(
+      otherUser.userID, firstMessageContent, messageID);
+  print("channel id that was created: ${channelID}");
+  if (channelID == -1) {
+    return -1;
   }
+  await populateChannelAndChannelUsersLocally(
+      db, channelID, "", otherUser.userID);
+  await populateChannelUsersLocally(
+      db, channelID, [otherUser.userID, config.userDetails.userID]);
+  return channelID;
 }
 
 // populate user table if not present
@@ -281,22 +427,29 @@ Future<void> PopulateUserTableIfNotExists(User newUser, Database db) async {
     await db.insert(
       'users',
       newUser.toJson(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.abort,
     );
+    print("new user inserted in local db");
   }
 }
 
-Future<int> _createChannelServer(String otherUserID) async {
+Future<int> _createChannelServer(
+    String otherUserID, String firstMessageContent, String messageID) async {
   String apiUrl = config.BASE_API_URL! + '/api/v1/channels/create';
 
   Map<String, dynamic> requestBody = {
-    'channel_name': otherUserID,
+    'channel_name': '',
     'tonality_tag': '',
     'description': '',
-    'users': [otherUserID, config.userDetails.userID]
+    'users': [otherUserID, config.userDetails.userID],
+    'sender_user_id': config.userDetails.userID,
+    'first_message': firstMessageContent,
+    'message_id': messageID
   };
 
   String jsonBody = jsonEncode(requestBody);
+
+  print("/create-channel data: ${jsonBody}");
 
   var response = await http.post(
     Uri.parse(apiUrl),
@@ -320,26 +473,52 @@ Future<int> _createChannelServer(String otherUserID) async {
   }
 }
 
-Future<void> _createChannelLocally(
-    Database db, int channelID, String channelName) async {
+Future<void> populateChannelAndChannelUsersLocally(
+    Database db, int channelID, String channelName, String otherUserID) async {
   try {
     await db.insert(
       "channels",
       {
-        'channel_name': channelName,
+        'channel_name': '',
         'id': channelID,
         'tonality_tag': '',
         'description': '',
-        'created_at': DateTime.now().millisecondsSinceEpoch.toString()
+        'created_at': DateTime.now().toString()
       },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+    print("channel created");
+
+    await db.insert(
+      "channel_users",
+      {'channel_id': channelID, 'user_id': otherUserID},
+      conflictAlgorithm: ConflictAlgorithm.abort,
     );
   } catch (e) {
     print("Error inserting channel ${e}");
   }
 }
 
-Future<void> _populateChannelUsersLocally(
+Future<void> PopulateChannelLocally(Database db, Channel channel) async {
+  try {
+    await db.insert(
+      "channels",
+      {
+        'channel_name': channel.channelName,
+        'id': channel.id,
+        'tonality_tag': channel.tonalityTag,
+        'description': channel.description,
+        'created_at': channel.createdAt ??
+            DateTime.now().millisecondsSinceEpoch.toString()
+      },
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  } catch (e) {
+    print("Error inserting channel ${e}");
+  }
+}
+
+Future<void> populateChannelUsersLocally(
   Database db,
   int channelId,
   List<String> userIds,
@@ -363,16 +542,12 @@ Future<void> _populateChannelUsersLocally(
 }
 
 Future<Channel?> fetchChannelDataByName(Database db, String channelName) async {
-  // Execute SELECT query to fetch channel data based on the channel name
-
-  print("channel name: ${channelName}");
   List<Map<String, dynamic>> results = await db.query(
     'channels',
     where: 'channel_name = ?',
     whereArgs: [channelName],
-    limit: 1, // Limit the query to return only one row
+    limit: 1,
   );
-
   print("channel details: ${results}");
 
   // If results are empty, return null
@@ -380,9 +555,77 @@ Future<Channel?> fetchChannelDataByName(Database db, String channelName) async {
     return null;
   }
 
-  // Otherwise, cast the first row of results to the Channel model
+  return Channel.fromMap(results.first);
+}
 
-  Channel tmp = Channel.fromMap(results.first);
-  print("tmp: ${tmp.toString()}");
-  return tmp;
+Future<Channel?> fetchChannelDataByChannelID(Database db, int channelID) async {
+  List<Map<String, dynamic>> results = await db.query(
+    'channels',
+    where: 'id = ?',
+    whereArgs: [channelID],
+    limit: 1,
+  );
+  print("channel details: ${results}");
+
+  // If results are empty, return null
+  if (results.isEmpty) {
+    return null;
+  }
+
+  return Channel.fromMap(results.first);
+}
+
+Future<List<int>> fetchAllChannelIds(Database db) async {
+  List<Map<String, dynamic>> results =
+      await db.query('channels', columns: ['id']);
+
+  List<int> channelIds = results.map((row) => row['id'] as int).toList();
+
+  return channelIds;
+}
+
+Future<Map<int, Channel>> fetchAllChannels(Database db) async {
+  final Map<int, Channel> channels = {};
+  final List<Map<String, dynamic>> maps = await db.query('channels');
+
+  for (final map in maps) {
+    final channel = Channel.fromMap(map);
+    channels[channel.id] = channel;
+  }
+
+  return channels;
+}
+
+Future<void> initiateCreationOfNewUserChat(
+    Database db, Channel channel, User newUser) async {
+  // update channels, channel_users, user tables
+}
+
+Future<List<User>> fetchAllUsersFromChannelUsers(
+    Database db, List<int> channelIDs) {
+  final sql = '''
+    SELECT DISTINCT users.*
+    FROM channel_users
+    INNER JOIN users on channel_users.user_id = users.user_id
+    WHERE channel_id IN (${channelIDs.join(',')}) AND users.user_id <> (${config.userDetails.userID})
+  ''';
+
+  return db.query(sql).then((results) {
+    return results.map((rawUser) => User.fromJson(rawUser)).toList();
+  });
+}
+
+Future<Channel?> fetchChannelDetailsFromUserID(
+    Database db, String userID) async {
+  final results = await db.query(
+    'channel_users',
+    where: 'user_id = ?',
+    whereArgs: [userID],
+  );
+
+  if (results.isEmpty) return null;
+
+  final channelId = results.first['channel_id'] as int;
+  final channelDetails = await fetchChannelDataByChannelID(db, channelId);
+  return channelDetails;
 }

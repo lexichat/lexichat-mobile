@@ -11,5 +11,5 @@ class WebSocketUtils {
 }
 
 class ChannelUtils {
-  void createChannelIfNotExists() {}
+  void InitiateCreationOfChannelIfNotExists() {}
 }
