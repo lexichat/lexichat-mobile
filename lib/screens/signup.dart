@@ -9,6 +9,7 @@ import 'package:lexichat/config/config.dart' as config;
 import 'dart:io';
 
 import 'package:image_picker/image_picker.dart';
+import 'package:lexichat/utils/ws_manager.dart';
 
 String PhoneNumberExtension = "+91";
 
@@ -500,8 +501,12 @@ class _GetUserDetailsState extends State<GetUserDetails> {
                                     duration: Duration(seconds: 3),
                                   ),
                                 );
+                                // init ws manager
+                                await InitializeWebSocketManager();
                                 // store local state of user deets
-                                LocalUserState.updateUserDetails(userDetails);
+                                await LocalUserState.updateUserDetails(
+                                    userDetails);
+
                                 Navigator.of(context).pushAndRemoveUntil(
                                   MaterialPageRoute(
                                       builder: (context) => HomeScreen()),
