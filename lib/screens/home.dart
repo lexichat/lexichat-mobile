@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:lexichat/models/Chat.dart';
 import 'package:lexichat/models/User.dart';
+import 'package:lexichat/screens/ai_chat.dart';
 import 'package:lexichat/screens/llm_setup.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
@@ -27,16 +30,29 @@ class _HomeScreenState extends State<HomeScreen> {
   String _searchQuery = '';
   List<User> _searchResults = [];
   Map<User, Conversation> _userProfilesWithLatestMessage = {};
+  Map<int, Channel> _allChannelsCache = {};
+  Map<String, User> _allUsersCache = {};
   bool _isLoading = true;
+  late StreamSubscription _messageSubscription;
+  late StreamSubscription _newUserChatSubscription;
 
   @override
   void initState() {
     super.initState();
     _fetchUserProfiles(DBClient);
+    _populateChannelCache(DBClient);
+    _populateUsersCache(DBClient);
+
+    _messageSubscription =
+        config.wsManager.messageStream.listen(_handleReceivingMessages);
+    _newUserChatSubscription =
+        config.fcmManager.newUserChatStream.listen(_handleIncomingNewUserChat);
   }
 
   void _fetchUserProfiles(Database db) async {
     _userProfilesWithLatestMessage = await fetchUsersWithLatestConversation(db);
+    // sort by timestamp of message DESC
+    sortUserProfileMessagesByDESCTimeStamp();
     print("user profiles with latest message");
     print(_userProfilesWithLatestMessage);
     setState(() {
@@ -44,12 +60,64 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _handleReceivingMessages(Conversation message) async {
+    // fetch user details from userid
+    User user = _allUsersCache[message.fromUserId]!;
+    print("user cache hit ${user.userID}");
+    // update from utc to user's time zone
+    message.createdAt = message.createdAt.toLocal();
+
+    print("incoming message: ${message}");
+
+    setState(() {
+      _userProfilesWithLatestMessage[user] = message;
+      sortUserProfileMessagesByDESCTimeStamp();
+    });
+  }
+
+  Future<void> _handleIncomingNewUserChat(
+      Map<User, Conversation> otherUserFirstMsg) async {
+    User otherUser = otherUserFirstMsg.keys.first;
+    Conversation firstMessage = otherUserFirstMsg[otherUser]!;
+    firstMessage.createdAt = firstMessage.createdAt.toLocal();
+
+    setState(() {
+      _userProfilesWithLatestMessage[otherUser] = firstMessage;
+      sortUserProfileMessagesByDESCTimeStamp();
+      _allUsersCache[otherUser.userID] = otherUser;
+    });
+  }
+
+  void _populateChannelCache(Database db) async {
+    final List<Map<String, dynamic>> maps = await db.query('channels');
+    for (final map in maps) {
+      final channel = Channel.fromMap(map);
+      _allChannelsCache[channel.id] = channel;
+    }
+  }
+
+  void _populateUsersCache(Database db) async {
+    final List<Map<String, dynamic>> maps = await db.query('users');
+    for (final map in maps) {
+      final user = User.fromJson(map);
+      _allUsersCache[user.userID] = user;
+    }
+  }
+
   void updateUserProfilesWithLatestMessage(
       User user, Conversation conversation) {
     setState(() {
       _userProfilesWithLatestMessage[user] = conversation;
+      sortUserProfileMessagesByDESCTimeStamp();
     });
     print("_userProfilesWithLatestMessage: ${_userProfilesWithLatestMessage}");
+  }
+
+  void sortUserProfileMessagesByDESCTimeStamp() {
+    _userProfilesWithLatestMessage = Map.fromEntries(
+      _userProfilesWithLatestMessage.entries.toList()
+        ..sort((a, b) => b.value.createdAt.compareTo(a.value.createdAt)),
+    );
   }
 
   void _toggleSearching() {
@@ -135,12 +203,6 @@ class _HomeScreenState extends State<HomeScreen> {
           final user = _searchResults[index];
           return GestureDetector(
             onTap: () async {
-              // check whether to create a new channel
-              await Future.wait([
-                CreateChannelIfNotExists(user, DBClient),
-                PopulateUserTableIfNotExists(user, DBClient)
-              ]);
-
               // navigate and show chat screen
               Navigator.push(
                 context,
@@ -183,6 +245,13 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       print('Error searching for users: $e');
     }
+  }
+
+  @override
+  void dispose() {
+    _messageSubscription.cancel();
+    _newUserChatSubscription.cancel();
+    super.dispose();
   }
 }
 
@@ -285,6 +354,16 @@ class MoreOptionsDrawer extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => LLMSetupScreen()),
+              );
+            },
+          ),
+          ListTile(
+            title: Text('Chat with AI'),
+            leading: Icon(Icons.bolt),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AIChatScreen()),
               );
             },
           ),
@@ -405,27 +484,67 @@ class _ChatScreenState extends State<ChatScreen> {
   late Channel channelDetails;
 
   late TextEditingController _messagingController;
+  late StreamSubscription _messageSubscription;
+  late StreamSubscription _messageStatusUpdatesSubscription;
 
   bool _isLoading = true;
+  bool _isCreateNewUserChat = false;
 
   @override
   void initState() {
     super.initState();
     _messagingController = TextEditingController();
     initializeData();
+
+    _messageSubscription =
+        config.wsManager.messageStream.listen(handleReceivingMessages);
+
+    _messageStatusUpdatesSubscription = config
+        .wsManager.messageStatusUpdateStream
+        .listen(handleMessageStatusUpdates);
   }
 
   initializeData() async {
     print("other user's name ${widget.otherUser.userName}");
-    Channel _channelDetails =
-        await _fetchChannelDetails(DBClient, widget.otherUser.userName);
-    setState(() {
-      channelDetails = _channelDetails;
-    });
+    // Channel? _channelDetails =
+    // await _fetchChannelDetails(DBClient, widget.otherUser.userName);
 
-    messages =
-        await _fetchMessagesReverseChronologically(DBClient, channelDetails.id);
+    // if (_channelDetails == null) {
+    //   _isCreateNewUserChat = true;
+    // }
+
+    // messages = await _fetchMessagesReverseChronologically(
+    //     DBClient, _channelDetails?.id ?? -1);
+
+    // messages = messages.reversed.toList();
+
+    // print("messages: ${messages}");
+
+    // setState(() {
+    //   if (_channelDetails != null) {
+    //     // channelDetails.channelName = "";
+    //     channelDetails = _channelDetails;
+    //   }
+    // });
+    Channel? _channelDetails =
+        await _fetchChannelDetailsByUserID(DBClient, widget.otherUser.userID);
+
+    messages = await _fetchMessagesReverseChronologically(
+        DBClient, _channelDetails?.id ?? -1);
+
     messages = messages.reversed.toList();
+
+    print("messages: ${messages}");
+
+    if (_channelDetails == null) {
+      print("new user chat is set to true");
+      _isCreateNewUserChat = true;
+    }
+    setState(() {
+      if (_channelDetails != null) {
+        channelDetails = _channelDetails;
+      }
+    });
 
     setState(() {
       _isLoading = false;
@@ -435,19 +554,55 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _messagingController.dispose();
+    _messageSubscription.cancel();
+    _messageStatusUpdatesSubscription.cancel();
     super.dispose();
   }
 
-  Future<Channel> _fetchChannelDetails(Database db, String channelName) async {
-    Channel? channelDetails = await fetchChannelDataByName(db, channelName);
-    if (channelDetails == null) {
-      throw Exception("Failed to fetch channel details");
+  Future<void> handleReceivingMessages(Conversation message) async {
+    // handle receiving and updating ui
+    if (message.fromUserId == widget.otherUser.userID) {
+      print("message is being read. ${message}");
+      // update timezone to local
+      message.createdAt = message.createdAt.toLocal();
+      setState(() {
+        messages.add(message);
+      });
+      // widget.updateUserProfileCallback(widget.otherUser, message);
     }
+  }
+
+  Future<void> handleMessageStatusUpdates(InBoundMessageAck ack) async {
+    if (messages.any((message) => message.id == ack.messageID)) {
+      print("message found for status update");
+      Conversation msg =
+          messages.firstWhere((message) => message.id == ack.messageID);
+      setState(() {
+        msg.status = ack.status;
+      });
+    }
+  }
+
+  Future<Channel?> _fetchChannelDetails(Database db, String channelName) async {
+    Channel? channelDetails = await fetchChannelDataByName(db, channelName);
+    // if (channelDetails == null) {
+    //   throw Exception("Failed to fetch channel details");
+    // }
+    return channelDetails;
+  }
+
+  Future<Channel?> _fetchChannelDetailsByUserID(
+      Database db, String userID) async {
+    Channel? channelDetails = await fetchChannelDetailsFromUserID(db, userID);
+    print("channel_details:  $channelDetails");
     return channelDetails;
   }
 
   Future<List<Conversation>> _fetchMessagesReverseChronologically(
       Database db, int channelID) async {
+    if (channelID == -1) {
+      return [];
+    }
     final int _messagesPerBatch = 100;
     int _nextOffSet = 0;
     List<Conversation> latestMessagesFromChannelName =
@@ -476,19 +631,21 @@ class _ChatScreenState extends State<ChatScreen> {
             body: Column(
               children: [
                 Expanded(
-                  child: ListView.builder(
-                    // reverse: true,
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      return MessageTile(
-                        message: messages[index].message,
-                        isCurrentUser: messages[index].fromUserId !=
-                            widget.otherUser.userID,
-                        status: messages[index].status,
-                        timestamp: messages[index].createdAt.toString(),
-                      );
-                    },
-                  ),
+                  child: (messages.length == 0)
+                      ? Center(child: Text("Start Chatting"))
+                      : ListView.builder(
+                          itemCount: messages.length,
+                          itemBuilder: (context, index) {
+                            final message = messages[index];
+                            return MessageTile(
+                              message: message.message,
+                              isCurrentUser:
+                                  message.fromUserId != widget.otherUser.userID,
+                              status: message.status,
+                              timestamp: message.createdAt.toString(),
+                            );
+                          },
+                        ),
                 ),
                 Container(
                   decoration: BoxDecoration(
@@ -507,7 +664,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       Expanded(
                         child: TextField(
                           controller: _messagingController,
-                          decoration: InputDecoration(
+                          decoration: const InputDecoration(
                             hintText: 'Type a message...',
                             hintStyle: TextStyle(color: Colors.grey),
                             contentPadding: EdgeInsets.symmetric(
@@ -528,16 +685,35 @@ class _ChatScreenState extends State<ChatScreen> {
                             Icons.send,
                             color: Colors.green,
                           ),
-                          onPressed: () {
-                            // Send message
-                            // sendMessage(_messagingController.text);
+                          onPressed: () async {
+                            // check to create channel mechanism here
+                            if (_isCreateNewUserChat) {
+                              print("START: createChannelMechanism");
+                              Conversation message =
+                                  await _createChannelMechanism(
+                                      _messagingController.text,
+                                      Uuid().v4().toString());
+                              print("END: createChannelMechanism");
+                              _messagingController.clear();
+                              FocusManager.instance.primaryFocus?.unfocus();
+                              message.status = MessageStatuses.sent.toString();
+                              setState(() {
+                                messages.add(message);
+                              });
+                              widget.updateUserProfileCallback(
+                                  widget.otherUser, message);
+                              //await update local db
+                              writeConversation(DBClient, message);
+
+                              return;
+                            }
                             sendMessage(Conversation(
                                 id: Uuid().v4().toString(),
                                 channelId: channelDetails.id,
                                 createdAt: DateTime.now(),
                                 fromUserId: config.userDetails.userID,
                                 message: _messagingController.text,
-                                status: "pending"));
+                                status: MessageStatuses.pending.toString()));
                             FocusManager.instance.primaryFocus?.unfocus();
                             ;
                           },
@@ -561,9 +737,42 @@ class _ChatScreenState extends State<ChatScreen> {
     writeConversation(DBClient, message);
 
     // await pushMessageToServer()
-    wsManager.sendMessage(
-        OutBoundMessage(Message: message.message, MessageID: message.id));
+    config.wsManager.sendMessage(
+        OutBoundMessage(Message: message.message, MessageID: message.id),
+        message.channelId);
     _messagingController.clear();
+  }
+
+  Future<Conversation> _createChannelMechanism(
+      String firstMessage, String messageID) async {
+    List<Future> futures = [
+      InitiateCreationOfChannelIfNotExists(
+          widget.otherUser, firstMessage, messageID, DBClient),
+      PopulateUserTableIfNotExists(widget.otherUser, DBClient)
+    ];
+
+    List<dynamic> results = await Future.wait(futures);
+    int channelID = results[0] as int;
+
+    // update ws manager
+    if (channelID != -1) {
+      await config.wsManager.addNewWSConnection(channelID);
+      setState(() {
+        _isCreateNewUserChat = false;
+        channelDetails = Channel(
+            id: channelID,
+            channelName: widget.otherUser.userName,
+            createdAt: DateTime.now());
+      });
+      return Conversation(
+          id: messageID,
+          channelId: channelID,
+          createdAt: DateTime.now(),
+          fromUserId: config.userDetails.userID,
+          message: firstMessage,
+          status: MessageStatuses.pending.toString());
+    }
+    throw Exception("Failed to create channel. Try again");
   }
 }
 
@@ -668,25 +877,25 @@ class MessageTile extends StatelessWidget {
   }
 
   Widget getStatusIcon(String status) {
-    if (status == 'pending') {
+    if (status == MessageStatuses.pending.toString()) {
       return const Icon(
         ChatIcons.accessTime,
         color: Colors.black,
         size: 16.0,
       );
-    } else if (status == 'sent') {
+    } else if (status == MessageStatuses.sent.toString()) {
       return const Icon(
         ChatIcons.done,
         color: Colors.black,
         size: 16.0,
       );
-    } else if (status == 'delivered') {
+    } else if (status == MessageStatuses.delivered.toString()) {
       return const Icon(
         ChatIcons.doneAll,
         color: Colors.black,
         size: 16.0,
       );
-    } else if (status == 'read') {
+    } else if (status == MessageStatuses.read.toString()) {
       return const Icon(
         ChatIcons.doneAll,
         color: Colors.green,
