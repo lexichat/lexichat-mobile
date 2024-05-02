@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:lexichat/config/config.dart' as config;
 
 class JwtUtil {
   static final FlutterSecureStorage _storage = FlutterSecureStorage();
@@ -10,6 +11,7 @@ class JwtUtil {
 
   static Future<void> setJwtToken(String token) async {
     await _storage.write(key: 'jwtToken', value: token);
+    config.JWT_Token = token;
   }
 
   static Future<void> setUserId(String userId) async {

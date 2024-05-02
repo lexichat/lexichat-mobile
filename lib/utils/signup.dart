@@ -92,8 +92,12 @@ Future<String?> createUser(
       final token = responseData['token'];
       final userId = responseData['userId'];
 
+      config.JWT_Token = token;
+
       await JwtUtil.setJwtToken(token);
       await JwtUtil.setUserId(userId);
+
+      print(await JwtUtil.getJwtToken());
 
       return null;
     } else {
